@@ -1,15 +1,7 @@
-#include <CapacitiveSensor.h>
+#include <avr/power.h>
 #include <FastLED.h>
-#include <Bounce2.h>
 
-#define PIN_LEDS 1
-#define PIN_CAP_SEND_PIN 2
-#define PIN_CAP_RECEIVE_PIN 3
-#define PIN_BUTTOM_MODE 4
-#define PIN_BUTTOM_VALUE 5
-
-// #define DEBUG 0
-#define LED_COUNT 10
+#include "config.h"
 
 const static CRGB::HTMLColorCode colors[35] = {
   CRGB::Crimson,
@@ -49,59 +41,87 @@ const static CRGB::HTMLColorCode colors[35] = {
   CRGB::Brown
 };
 
-
-
 CRGB leds[LED_COUNT];
-CapacitiveSensor cap_sensor = CapacitiveSensor(PIN_CAP_SEND_PIN, PIN_CAP_RECEIVE_PIN);
-CHSV hsv;
-Bounce button_mode = Bounce();
-Bounce button_value = Bounce();
-uint8_t led_brightness = 30;
+volatile unsigned long show_smiley_time;
+volatile unsigned long timer_runs;
 
-/*
- * set LED Brightness
- */
-void set_led_brightness(uint8_t value) {
-  led_brightness = value;
-  FastLED.setBrightness(value);
+void leds_clear() {
+  FastLED.clear(true);
+  FastLED.show();
 }
 
-/*
- * update all push Buttons
- */
-void update_buttons() {
-  button_mode.update();
-  button_value.update();
+void show_smiley() {
+  if (! (micros() > show_smiley_time + 30)) {
+    return;
+  }
+  CRGB::HTMLColorCode v;
+
+  // the eyes
+  v = colors[random(34)];
+  leds[0] = v;
+  leds[1] = v;
+
+  // the nose
+  v = colors[random(34)];
+  leds[2] = v;
+  leds[3] = v;
+
+  // the mouth
+  v = colors[random(34)];
+  leds[4] = v;
+  leds[5] = v;
+  leds[6] = v;
+  leds[7] = v;
+
+  FastLED.setBrightness(led_brightness);
+  FastLED.show();
+  show_smiley_time = millis();
+
+  cli();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1  = 0;
+
+  TCCR1B |= (1 << CS12) | (1 << CS10);
+  TIMSK1 |= (1 << TOIE1);
+  sei();
+  timer_runs = 0;
 }
 
-/*
- * update Cap Sensor
- */
-void update_cap_sensor() {
-  long cap_value = cap.capacitiveSensor(30);
-  // FIXME:---------------------------
-}
 
 void setup() {
-#ifdef DEBUG
-  Serial.begin(9600);
-#endif
-  FastLED.addLeds<WS2812, PIN_LEDS>(leds, LED_COUNT);
-  FastLED.clear(true);
+  show_smiley_time = millis();
 
-  hsv.hue = 1;
-  hsv.val = 255;
-  hsv.sat = 240;
+  power_adc_disable();
+  power_twi_disable();
+  power_spi_disable();
+  power_timer2_disable();
+  power_usart0_disable();
 
-  button_mode.attach(PIN_BUTTOM_MODE);
-  button_mode.interval(5);
+  randomSeed(analogRead(0));
+  pinMode(PIN_MOTION, INPUT);
 
-  button_value.attach(PIN_BUTTOM_VALUE);
-  button_value.interval(5);
+  attachInterrupt(digitalPinToInterrupt(PIN_MOTION), show_smiley, FALLING);
+
+  FastLED.addLeds<PL9823, PIN_LEDS>(leds, LED_COUNT);
+  FastLED.setBrightness(led_brightness);
+  leds_clear();
+
+}
+
+ISR(TIMER1_OVF_vect) {
+  TCNT1 = 0;
+  timer_runs++;
+
+  if (timer_runs > 3) {
+    leds_clear();
+
+    cli();
+    TCCR1A = 0;
+    TCCR1B = 0;
+    sei();
+  }
 }
 
 void loop() {
-  update_buttons();
-  update_cap_sensor();
-
 }
