@@ -43,7 +43,7 @@ const static CRGB::HTMLColorCode colors[35] = {
 
 CRGB leds[LED_COUNT];
 volatile unsigned long show_smiley_time;
-volatile unsigned long timer_runs;
+volatile unsigned short timer_runs;
 
 void leds_clear() {
   FastLED.clear(true);
